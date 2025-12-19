@@ -44,6 +44,7 @@ class CfRateLimiter
     public const SCOPE_API_KEY = 'api_key_ops';
     public const SCOPE_QUOTA_GIFT = 'quota_gift_ops';
     public const SCOPE_AJAX_SENSITIVE = 'ajax_sensitive';
+    public const SCOPE_DNS_UNLOCK = 'dns_unlock';
 
     private const SETTING_KEYS = [
         self::SCOPE_REGISTER => 'rate_limit_register_per_hour',
@@ -51,6 +52,7 @@ class CfRateLimiter
         self::SCOPE_API_KEY => 'rate_limit_api_key_per_hour',
         self::SCOPE_QUOTA_GIFT => 'rate_limit_quota_gift_per_hour',
         self::SCOPE_AJAX_SENSITIVE => 'rate_limit_ajax_per_hour',
+        self::SCOPE_DNS_UNLOCK => 'rate_limit_dns_unlock_per_hour',
     ];
 
     private const DEFAULT_LIMITS = [
@@ -59,6 +61,7 @@ class CfRateLimiter
         self::SCOPE_API_KEY => 20,
         self::SCOPE_QUOTA_GIFT => 20,
         self::SCOPE_AJAX_SENSITIVE => 60,
+        self::SCOPE_DNS_UNLOCK => 30,
     ];
 
     private static ?bool $tableReady = null;

@@ -94,9 +94,10 @@ class CfClientViewModelBuilder
 
         $globals['roots'] = self::loadRootDomains();
         $globals['rootLimitMap'] = self::loadRootLimitMap();
+        $globals['dnsUnlock'] = self::buildDnsUnlockView($userId, $moduleSettings);
 
         $globals['userid'] = $userId;
-        $globals['myInviteCode'] = self::ensureInviteCode($userId);
+
 
         $banState = function_exists('cfmod_resolve_user_ban_state') ? cfmod_resolve_user_ban_state($userId) : ['is_banned' => false, 'reason' => ''];
         $globals['banState'] = $banState;
@@ -278,6 +279,63 @@ class CfClientViewModelBuilder
     {
         $letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
         return $letters[random_int(0, 25)] . $letters[random_int(0, 25)];
+    }
+
+    private static function buildDnsUnlockView(int $userId, array $moduleSettings): array
+    {
+        $service = CfDnsUnlockService::instance();
+        $enabled = $service->isEnabled($moduleSettings);
+        $view = [
+            'enabled' => $enabled,
+            'isUnlocked' => false,
+            'unlockCode' => '',
+            'unlockedAt' => null,
+            'unlockByUserId' => null,
+            'logs' => [
+                'items' => [],
+                'page' => 1,
+                'perPage' => 10,
+                'total' => 0,
+                'totalPages' => 1,
+            ],
+        ];
+
+        if (!$enabled || $userId <= 0) {
+            return $view;
+        }
+
+        try {
+            $codeRow = $service->ensureUserCode($userId);
+            $view['unlockCode'] = (string) ($codeRow['unlock_code'] ?? '');
+        } catch (\Throwable $e) {
+            $view['unlockCode'] = '';
+        }
+
+        try {
+            $status = $service->getUserStatus($userId);
+            $view['isUnlocked'] = $status['is_unlocked'];
+            $view['unlockedAt'] = $status['unlocked_at'];
+            $view['unlockByUserId'] = $status['unlock_by_userid'];
+        } catch (\Throwable $e) {
+            $view['isUnlocked'] = false;
+            $view['unlockedAt'] = null;
+            $view['unlockByUserId'] = null;
+        }
+
+        $page = max(1, (int) ($_GET['dns_unlock_page'] ?? 1));
+        try {
+            $view['logs'] = $service->getLogsForCodeOwner($userId, $page, 10);
+        } catch (\Throwable $e) {
+            $view['logs'] = [
+                'items' => [],
+                'page' => $page,
+                'perPage' => 10,
+                'total' => 0,
+                'totalPages' => 1,
+            ];
+        }
+
+        return $view;
     }
 
     private static function loadOrCreateQuota(int $userId, int $max, int $inviteLimitGlobal)

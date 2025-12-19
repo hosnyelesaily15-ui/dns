@@ -19,8 +19,76 @@
             CFClient.bootstrap();
         }
 
+        const CF_DNS_UNLOCK = window.cfDnsUnlock || { enabled: false, isUnlocked: true, postUrl: window.location.href };
+        let cfDnsUnlockModalInstance = null;
+        const dnsUnlockAlertEl = document.getElementById('dnsUnlockAlert');
+        const dnsUnlockForm = document.getElementById('dnsUnlockForm');
+        const dnsUnlockInput = document.getElementById('dnsUnlockInput');
+        const dnsUnlockSubmit = document.getElementById('dnsUnlockSubmit');
+        function setDnsUnlockAlert(type, message) {
+            if (!dnsUnlockAlertEl) { return; }
+            dnsUnlockAlertEl.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-warning');
+            dnsUnlockAlertEl.classList.add('alert-' + (type || 'warning'));
+            dnsUnlockAlertEl.textContent = message || '';
+        }
+        function openDnsUnlockModal() {
+            if (!CF_DNS_UNLOCK.enabled) { return; }
+            const modalEl = document.getElementById('dnsUnlockModal');
+            if (!modalEl) { return; }
+            if (!cfDnsUnlockModalInstance) {
+                cfDnsUnlockModalInstance = new bootstrap.Modal(modalEl);
+            }
+            cfDnsUnlockModalInstance.show();
+        }
+        if (dnsUnlockForm) {
+            dnsUnlockForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (!CF_DNS_UNLOCK.enabled || CF_DNS_UNLOCK.isUnlocked) {
+                    openDnsUnlockModal();
+                    return;
+                }
+                const code = (dnsUnlockInput?.value || '').trim();
+                if (!code) {
+                    setDnsUnlockAlert('warning', cfLang('dnsUnlockEnterCode', '请输入解锁码'));
+                    dnsUnlockInput?.focus();
+                    return;
+                }
+                if (dnsUnlockSubmit) {
+                    dnsUnlockSubmit.disabled = true;
+                    dnsUnlockSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + cfLang('buttonSubmitting', '提交中...');
+                }
+                fetch(CF_DNS_UNLOCK.postUrl || window.location.href, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': window.CF_MOD_CSRF || ''
+                    },
+                    body: JSON.stringify({ action: 'ajax_dns_unlock', unlock_code: code })
+                }).then(resp => resp.json()).then(data => {
+                    if (data.success) {
+                        setDnsUnlockAlert('success', data.message || cfLang('dnsUnlockSuccess', 'DNS 解锁成功，正在刷新页面...'));
+                        CF_DNS_UNLOCK.isUnlocked = true;
+                        dnsUnlockInput?.setAttribute('disabled', 'disabled');
+                        setTimeout(function() { window.location.reload(); }, 1000);
+                    } else {
+                        setDnsUnlockAlert('danger', data.error || cfLang('dnsUnlockError', '解锁失败，请稍后重试。'));
+                        if (dnsUnlockSubmit) {
+                            dnsUnlockSubmit.disabled = false;
+                            dnsUnlockSubmit.innerHTML = '<i class="fas fa-key"></i> ' + cfLang('cfclient.dns_unlock.modal.submit', '提交解锁');
+                        }
+                    }
+                }).catch(function() {
+                    setDnsUnlockAlert('danger', cfLang('networkError', '网络异常，请稍后再试'));
+                    if (dnsUnlockSubmit) {
+                        dnsUnlockSubmit.disabled = false;
+                        dnsUnlockSubmit.innerHTML = '<i class="fas fa-key"></i> ' + cfLang('cfclient.dns_unlock.modal.submit', '提交解锁');
+                    }
+                });
+            });
+        }
+
         const ROOT_LIMIT_MAP = <?php echo json_encode($rootLimitMap, CFMOD_SAFE_JSON_FLAGS); ?>;
-        const rootLimitHint = document.getElementById('register_limit_hint');
+
 
         // 注册根域名后缀实时显示
         const rootSelect = document.getElementById('register_rootdomain');
@@ -172,6 +240,11 @@ if (targetInput) targetInput.value = '';
                 alert(cfLang('nsManagementDisabled', '已禁止设置 DNS 服务器（NS）。'));
                 return;
             }
+            if (CF_DNS_UNLOCK.enabled && !CF_DNS_UNLOCK.isUnlocked) {
+                alert(cfLang('dnsUnlockRequired', '请先完成 DNS 解锁后再设置 NS 服务器。'));
+                openDnsUnlockModal();
+                return;
+            }
             document.getElementById('ns_subdomain_id').value = subId;
             document.getElementById('ns_subdomain_name').value = name;
             // 预填当前NS
@@ -182,6 +255,12 @@ if (targetInput) targetInput.value = '';
             modal.show();
         }
         document.getElementById('nsForm')?.addEventListener('submit', function(e){
+            if (CF_DNS_UNLOCK.enabled && !CF_DNS_UNLOCK.isUnlocked) {
+                e.preventDefault();
+                alert(cfLang('dnsUnlockRequired', '请先完成 DNS 解锁后再设置 NS 服务器。'));
+                openDnsUnlockModal();
+                return;
+            }
             const ta = document.getElementById('ns_lines');
             if (!ta) return;
             const cleaned = ta.value.split('\n')
@@ -213,6 +292,12 @@ const recordType = document.querySelector('select[name="record_type"]');
 const recordContent = document.querySelector('input[name="record_content"]');
 const recordNameInput = document.getElementById('dns_record_name');
 const type = recordType.value;
+if (CF_DNS_UNLOCK.enabled && !CF_DNS_UNLOCK.isUnlocked && String(type).toUpperCase() === 'NS') {
+    e.preventDefault();
+    alert(cfLang('dnsUnlockRequired', '请先完成 DNS 解锁后再设置 NS 记录。'));
+    openDnsUnlockModal();
+    return;
+}
 if (recordNameInput) {
 let recordNameValue = recordNameInput.value.trim();
 if (recordNameValue === '') {

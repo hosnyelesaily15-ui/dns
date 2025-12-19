@@ -38,6 +38,11 @@ class CfClientActionService
         $msg = $globals['msg'] ?? '';
         $msg_type = $globals['msg_type'] ?? '';
         $registerError = $globals['registerError'] ?? '';
+        $dnsUnlockMeta = $globals['dnsUnlock'] ?? [];
+        $dnsUnlockEnabled = !empty($dnsUnlockMeta['enabled']);
+        $dnsUnlockUnlocked = !empty($dnsUnlockMeta['isUnlocked']);
+        $dnsUnlockRequired = $dnsUnlockEnabled && !$dnsUnlockUnlocked;
+        $dnsUnlockBlockMessage = self::actionText('dns_unlock.required', '为了安全，请先完成 DNS 解锁后再执行此操作。');
 
         try {
             self::enforceClientRateLimit($action, $module_settings, intval($userid ?? 0));
@@ -686,7 +691,7 @@ if($_POST['action'] == "create_dns" && isset($_POST['subdomain_id'])) {
         if ($isUserBannedOrInactive) {
             $msg = self::actionText('dns.create.banned', '您的账号已被封禁或停用，禁止创建DNS记录。') . ($banReasonText ? (' ' . $banReasonText) : '');
             $msg_type = 'danger';
-        } elseif (self::shouldUseAsyncDns('create_dns', $module_settings, $isAsyncReplay)) {
+        } elseif (!$dnsUnlockRequired && self::shouldUseAsyncDns('create_dns', $module_settings, $isAsyncReplay)) {
             $jobId = self::enqueueAsyncDnsJob(intval($userid ?? 0), 'create_dns');
             $msg = self::formatAsyncQueuedMessage($jobId);
             $msg_type = 'info';
@@ -735,8 +740,14 @@ if($_POST['action'] == "create_dns" && isset($_POST['subdomain_id'])) {
             $record_port = 65535;
         }
 
+        if ($dnsUnlockRequired && $record_type_upper === 'NS') {
+            $msg = $dnsUnlockBlockMessage;
+            $msg_type = 'warning';
+            $shouldProceedDnsCreate = false;
+        }
+
         if ($shouldProceedDnsCreate && $record_type_upper === 'SRV') {
-            if ($record_port < 1 || $record_port > 65535) {
+
                 $msg = self::actionText('dns.validation.srv_port', 'SRV记录的端口必须在1-65535之间');
                 $msg_type = 'danger';
                 $shouldProceedDnsCreate = false;
@@ -1090,7 +1101,7 @@ if($_POST['action'] == "update_dns" && isset($_POST['subdomain_id'])) {
         if ($isUserBannedOrInactive) {
             $msg = self::actionText('dns.update.banned', '您的账号已被封禁或停用，禁止更新DNS记录。') . ($banReasonText ? (' ' . $banReasonText) : '');
             $msg_type = 'danger';
-        } elseif (self::shouldUseAsyncDns('update_dns', $module_settings, $isAsyncReplay)) {
+        } elseif (!$dnsUnlockRequired && self::shouldUseAsyncDns('update_dns', $module_settings, $isAsyncReplay)) {
             $jobId = self::enqueueAsyncDnsJob(intval($userid ?? 0), 'update_dns');
             $msg = self::formatAsyncQueuedMessage($jobId);
             $msg_type = 'info';
@@ -1140,8 +1151,14 @@ if($_POST['action'] == "update_dns" && isset($_POST['subdomain_id'])) {
             $record_port = 65535;
         }
 
+        if ($dnsUnlockRequired && $record_type_upper === 'NS') {
+            $msg = $dnsUnlockBlockMessage;
+            $msg_type = 'warning';
+            $shouldProceedDnsUpdate = false;
+        }
+
         if ($shouldProceedDnsUpdate && $record_type_upper === 'SRV') {
-            if ($record_port < 1 || $record_port > 65535) {
+
                 $msg = self::actionText('dns.validation.srv_port', 'SRV记录的端口必须在1-65535之间');
                 $msg_type = 'danger';
                 $shouldProceedDnsUpdate = false;
@@ -1199,119 +1216,125 @@ if($_POST['action'] == "update_dns" && isset($_POST['subdomain_id'])) {
                         }
 
                         if ($targetRecord) {
-                            list($cf, $providerError, $providerContext) = cfmod_client_acquire_provider_for_subdomain($record, $module_settings);
-                            if (!$cf) {
-                                $msg = $providerError;
-                                $msg_type = 'danger';
+                            $targetRecordType = strtoupper(trim((string) ($targetRecord->type ?? '')));
+                            if ($dnsUnlockRequired && $targetRecordType === 'NS') {
+                                $msg = $dnsUnlockBlockMessage;
+                                $msg_type = 'warning';
                             } else {
-                                $newFullName = ($record_name === '@') ? $record->subdomain : ($record_name . '.' . $record->subdomain);
-                                $caa_content = null;
-
-                                if ($record_type_upper === 'CAA') {
-                                    $caa_flag = intval($_POST['caa_flag'] ?? 0);
-                                    $caa_tag = trim($_POST['caa_tag'] ?? 'issue');
-                                    $caa_value = trim($_POST['caa_value'] ?? '');
-                                    if ($caa_value === '') {
-                                        $msg = self::actionText('dns.validation.caa_value_required', 'CAA记录的Value不能为空');
-                                        $msg_type = 'warning';
-                                        throw new Exception($msg);
-                                    }
-                                    $caa_content = $caa_flag . ' ' . $caa_tag . ' "' . str_replace('"', '\"', $caa_value) . '"';
-                                    $res = $cf->updateDnsRecord($record->cloudflare_zone_id, $targetRecord->record_id, [
-                                        'type' => $record_type_upper,
-                                        'name' => $newFullName,
-                                        'content' => $caa_content,
-                                        'ttl' => $record_ttl
-                                    ]);
+                                list($cf, $providerError, $providerContext) = cfmod_client_acquire_provider_for_subdomain($record, $module_settings);
+                                if (!$cf) {
+                                    $msg = $providerError;
+                                    $msg_type = 'danger';
                                 } else {
-                                    $res = $cf->updateDnsRecordRaw($record->cloudflare_zone_id, $targetRecord->record_id, [
-                                        'type' => $record_type_upper,
-                                        'name' => $newFullName,
-                                        'content' => $record_content,
-                                        'ttl' => $record_ttl,
-                                        'line' => $line,
-                                        'priority' => $record_priority
-                                    ]);
-                                }
+                                    $newFullName = ($record_name === '@') ? $record->subdomain : ($record_name . '.' . $record->subdomain);
+                                    $caa_content = null;
 
-                                if ($res['success']) {
-                                    try {
-                                        $fresh = $cf->getDnsRecords($record->cloudflare_zone_id, $record->subdomain);
-                                        if (($fresh['success'] ?? false)) {
-                                            foreach (($fresh['result'] ?? []) as $fr) {
-                                                $exists = self::findLocalRecordByRemote($subdomain_id, $fr);
-                                                if (!$exists) {
-                                                    Capsule::table('mod_cloudflare_dns_records')->insert([
-                                                        'subdomain_id' => $subdomain_id,
-                                                        'zone_id' => $record->cloudflare_zone_id,
-                                                        'record_id' => isset($fr['id']) ? (string) $fr['id'] : null,
-                                                        'name' => ($fr['name'] ?? $record->subdomain),
-                                                        'type' => strtoupper(trim((string)($fr['type'] ?? 'A'))),
-                                                        'content' => (string)($fr['content'] ?? ''),
-                                                        'ttl' => intval($fr['ttl'] ?? 600),
-                                                        'proxied' => 0,
-                                                        'status' => 'active',
-                                                        'created_at' => date('Y-m-d H:i:s'),
-                                                        'updated_at' => date('Y-m-d H:i:s')
-                                                    ]);
-                                                }
-                                            }
+                                    if ($record_type_upper === 'CAA') {
+                                        $caa_flag = intval($_POST['caa_flag'] ?? 0);
+                                        $caa_tag = trim($_POST['caa_tag'] ?? 'issue');
+                                        $caa_value = trim($_POST['caa_value'] ?? '');
+                                        if ($caa_value === '') {
+                                            $msg = self::actionText('dns.validation.caa_value_required', 'CAA记录的Value不能为空');
+                                            $msg_type = 'warning';
+                                            throw new Exception($msg);
                                         }
-                                    } catch (Exception $e) {
-                                    }
-
-                                    CfSubdomainService::syncDnsHistoryFlag($subdomain_id);
-
-                                    $final_content = $record_content;
-                                    if ($record_type_upper === 'CAA' && $caa_content !== null) {
-                                        $final_content = $caa_content;
-                                    }
-
-                                    Capsule::table('mod_cloudflare_dns_records')
-                                        ->where('id', $targetRecord->id)
-                                        ->update([
+                                        $caa_content = $caa_flag . ' ' . $caa_tag . ' "' . str_replace('"', '\"', $caa_value) . '"';
+                                        $res = $cf->updateDnsRecord($record->cloudflare_zone_id, $targetRecord->record_id, [
                                             'type' => $record_type_upper,
                                             'name' => $newFullName,
-                                            'content' => $final_content,
-                                            'ttl' => $record_ttl,
-                                            'proxied' => 0,
-                                            'line' => $line,
-                                            'priority' => in_array($record_type_upper, ['MX','SRV']) ? $record_priority : null,
-                                            'updated_at' => date('Y-m-d H:i:s')
+                                            'content' => $caa_content,
+                                            'ttl' => $record_ttl
                                         ]);
+                                    } else {
+                                        $res = $cf->updateDnsRecordRaw($record->cloudflare_zone_id, $targetRecord->record_id, [
+                                            'type' => $record_type_upper,
+                                            'name' => $newFullName,
+                                            'content' => $record_content,
+                                            'ttl' => $record_ttl,
+                                            'line' => $line,
+                                            'priority' => $record_priority
+                                        ]);
+                                    }
 
-                                    if ($newFullName === $record->subdomain) {
-                                        Capsule::table('mod_cloudflare_subdomain')
-                                            ->where('id', $subdomain_id)
+                                    if ($res['success']) {
+                                        try {
+                                            $fresh = $cf->getDnsRecords($record->cloudflare_zone_id, $record->subdomain);
+                                            if (($fresh['success'] ?? false)) {
+                                                foreach (($fresh['result'] ?? []) as $fr) {
+                                                    $exists = self::findLocalRecordByRemote($subdomain_id, $fr);
+                                                    if (!$exists) {
+                                                        Capsule::table('mod_cloudflare_dns_records')->insert([
+                                                            'subdomain_id' => $subdomain_id,
+                                                            'zone_id' => $record->cloudflare_zone_id,
+                                                            'record_id' => isset($fr['id']) ? (string) $fr['id'] : null,
+                                                            'name' => ($fr['name'] ?? $record->subdomain),
+                                                            'type' => strtoupper(trim((string)($fr['type'] ?? 'A'))),
+                                                            'content' => (string)($fr['content'] ?? ''),
+                                                            'ttl' => intval($fr['ttl'] ?? 600),
+                                                            'proxied' => 0,
+                                                            'status' => 'active',
+                                                            'created_at' => date('Y-m-d H:i:s'),
+                                                            'updated_at' => date('Y-m-d H:i:s')
+                                                        ]);
+                                                    }
+                                                }
+                                            }
+                                        } catch (Exception $e) {
+                                        }
+
+                                        CfSubdomainService::syncDnsHistoryFlag($subdomain_id);
+
+                                        $final_content = $record_content;
+                                        if ($record_type_upper === 'CAA' && $caa_content !== null) {
+                                            $final_content = $caa_content;
+                                        }
+
+                                        Capsule::table('mod_cloudflare_dns_records')
+                                            ->where('id', $targetRecord->id)
                                             ->update([
-                                                'notes' => '已解析',
+                                                'type' => $record_type_upper,
+                                                'name' => $newFullName,
+                                                'content' => $final_content,
+                                                'ttl' => $record_ttl,
+                                                'proxied' => 0,
+                                                'line' => $line,
+                                                'priority' => in_array($record_type_upper, ['MX','SRV']) ? $record_priority : null,
                                                 'updated_at' => date('Y-m-d H:i:s')
                                             ]);
-                                    }
 
-                                    if (function_exists('cloudflare_subdomain_log')) {
-                                        cloudflare_subdomain_log(
-                                            'client_update_dns',
-                                            ['record_id' => $targetRecord->record_id, 'type' => $record_type_upper, 'content' => $record_content, 'ttl' => $record_ttl, 'line' => $line],
-                                            $userid,
-                                            $subdomain_id
-                                        );
-                                    }
+                                        if ($newFullName === $record->subdomain) {
+                                            Capsule::table('mod_cloudflare_subdomain')
+                                                ->where('id', $subdomain_id)
+                                                ->update([
+                                                    'notes' => '已解析',
+                                                    'updated_at' => date('Y-m-d H:i:s')
+                                                ]);
+                                        }
 
-                                    if ($record_name === '@') {
-                                        $msg = self::actionText('dns.update.success', 'DNS记录更新成功！域名解析已更新');
+                                        if (function_exists('cloudflare_subdomain_log')) {
+                                            cloudflare_subdomain_log(
+                                                'client_update_dns',
+                                                ['record_id' => $targetRecord->record_id, 'type' => $record_type_upper, 'content' => $record_content, 'ttl' => $record_ttl, 'line' => $line],
+                                                $userid,
+                                                $subdomain_id
+                                            );
+                                        }
+
+                                        if ($record_name === '@') {
+                                            $msg = self::actionText('dns.update.success', 'DNS记录更新成功！域名解析已更新');
+                                        } else {
+                                            $msg = self::actionText('dns.update.success', 'DNS记录更新成功！域名解析已更新');
+                                        }
+                                        $msg_type = "success";
                                     } else {
-                                        $msg = self::actionText('dns.update.success', 'DNS记录更新成功！域名解析已更新');
+                                        $errorText = cfmod_format_provider_error($res['errors'] ?? '');
+                                        $msg = self::actionText('dns.update.failed', 'DNS记录更新失败：%s', [$errorText]);
+                                        $msg_type = "danger";
                                     }
-                                    $msg_type = "success";
-                                } else {
-                                    $errorText = cfmod_format_provider_error($res['errors'] ?? '');
-                                    $msg = self::actionText('dns.update.failed', 'DNS记录更新失败：%s', [$errorText]);
-                                    $msg_type = "danger";
                                 }
                             }
                         }
-                    }
+
                 }
             } catch (Exception $e) {
                 $errorText = cfmod_format_provider_error($e->getMessage());
@@ -1467,7 +1490,7 @@ if($_POST['action'] == "delete_dns_record" && isset($_POST['record_id']) && isse
     if ($isUserBannedOrInactive) {
         $msg = self::actionText('dns.delete.banned', '您的账号已被封禁或停用，禁止删除DNS记录。') . ($banReasonText ? (' ' . $banReasonText) : '');
         $msg_type = 'danger';
-    } elseif (self::shouldUseAsyncDns('delete_dns_record', $module_settings, $isAsyncReplay)) {
+    } elseif (!$dnsUnlockRequired && self::shouldUseAsyncDns('delete_dns_record', $module_settings, $isAsyncReplay)) {
         $jobId = self::enqueueAsyncDnsJob(intval($userid ?? 0), 'delete_dns_record');
         $msg = self::formatAsyncQueuedMessage($jobId);
         $msg_type = 'info';
@@ -1494,73 +1517,79 @@ if($_POST['action'] == "delete_dns_record" && isset($_POST['record_id']) && isse
                 ->first();
 
             if ($rec) {
-                list($cf, $providerError, $providerContext) = cfmod_client_acquire_provider_for_subdomain($sub, $module_settings);
-                if (!$cf) {
-                    $msg = $providerError;
-                    $msg_type = 'danger';
+                $recType = strtoupper(trim((string) ($rec->type ?? '')));
+                if ($dnsUnlockRequired && $recType === 'NS') {
+                    $msg = $dnsUnlockBlockMessage;
+                    $msg_type = 'warning';
                 } else {
-                    $delRes = $cf->deleteSubdomain($sub->cloudflare_zone_id, $record_id);
-                    if ($delRes['success']) {
-                        try {
-                            $fresh = $cf->getDnsRecords($sub->cloudflare_zone_id, $sub->subdomain);
-                            if (($fresh['success'] ?? false)) {
-                                foreach (($fresh['result'] ?? []) as $fr) {
-                                    $exists = self::findLocalRecordByRemote($subdomain_id, $fr);
-                                    if (!$exists) {
-                                        Capsule::table('mod_cloudflare_dns_records')->insert([
-                                            'subdomain_id' => $subdomain_id,
-                                            'zone_id' => $sub->cloudflare_zone_id,
-                                            'record_id' => isset($fr['id']) ? (string) $fr['id'] : null,
-                                            'name' => ($fr['name'] ?? $sub->subdomain),
-                                            'type' => strtoupper($fr['type'] ?? 'A'),
-                                            'content' => ($fr['content'] ?? ''),
-                                            'ttl' => intval($fr['ttl'] ?? 600),
-                                            'proxied' => 0,
-                                            'status' => 'active',
-                                            'created_at' => date('Y-m-d H:i:s'),
-                                            'updated_at' => date('Y-m-d H:i:s')
-                                        ]);
+                    list($cf, $providerError, $providerContext) = cfmod_client_acquire_provider_for_subdomain($sub, $module_settings);
+                    if (!$cf) {
+                        $msg = $providerError;
+                        $msg_type = 'danger';
+                    } else {
+                        $delRes = $cf->deleteSubdomain($sub->cloudflare_zone_id, $record_id);
+                        if ($delRes['success']) {
+                            try {
+                                $fresh = $cf->getDnsRecords($sub->cloudflare_zone_id, $sub->subdomain);
+                                if (($fresh['success'] ?? false)) {
+                                    foreach (($fresh['result'] ?? []) as $fr) {
+                                        $exists = self::findLocalRecordByRemote($subdomain_id, $fr);
+                                        if (!$exists) {
+                                            Capsule::table('mod_cloudflare_dns_records')->insert([
+                                                'subdomain_id' => $subdomain_id,
+                                                'zone_id' => $sub->cloudflare_zone_id,
+                                                'record_id' => isset($fr['id']) ? (string) $fr['id'] : null,
+                                                'name' => ($fr['name'] ?? $sub->subdomain),
+                                                'type' => strtoupper($fr['type'] ?? 'A'),
+                                                'content' => ($fr['content'] ?? ''),
+                                                'ttl' => intval($fr['ttl'] ?? 600),
+                                                'proxied' => 0,
+                                                'status' => 'active',
+                                                'created_at' => date('Y-m-d H:i:s'),
+                                                'updated_at' => date('Y-m-d H:i:s')
+                                            ]);
+                                        }
                                     }
                                 }
+                            } catch (Exception $e) {}
+
+                            CfSubdomainService::syncDnsHistoryFlag($subdomain_id);
+
+                            Capsule::table('mod_cloudflare_dns_records')
+                                ->where('id', $rec->id)
+                                ->delete();
+
+                            if ($rec->name === $sub->subdomain && $sub->dns_record_id === $record_id) {
+                                Capsule::table('mod_cloudflare_subdomain')
+                                    ->where('id', $subdomain_id)
+                                    ->update([
+                                        'dns_record_id' => null,
+                                        'updated_at' => date('Y-m-d H:i:s')
+                                    ]);
                             }
-                        } catch (Exception $e) {}
 
-                        CfSubdomainService::syncDnsHistoryFlag($subdomain_id);
+                            $remainingRecords = Capsule::table('mod_cloudflare_dns_records')
+                                ->where('subdomain_id', $subdomain_id)
+                                ->count();
+                            if ($remainingRecords == 0) {
+                                Capsule::table('mod_cloudflare_subdomain')
+                                    ->where('id', $subdomain_id)
+                                    ->update([
+                                        'notes' => '已注册，等待解析设置',
+                                        'updated_at' => date('Y-m-d H:i:s')
+                                    ]);
+                            }
 
-                        Capsule::table('mod_cloudflare_dns_records')
-                            ->where('id', $rec->id)
-                            ->delete();
+                            if (function_exists('cloudflare_subdomain_log')) {
+                                cloudflare_subdomain_log('client_delete_dns_record', ['record_id' => $record_id, 'name' => $rec->name], $userid, $subdomain_id);
+                            }
 
-                        if ($rec->name === $sub->subdomain && $sub->dns_record_id === $record_id) {
-                            Capsule::table('mod_cloudflare_subdomain')
-                                ->where('id', $subdomain_id)
-                                ->update([
-                                    'dns_record_id' => null,
-                                    'updated_at' => date('Y-m-d H:i:s')
-                                ]);
+                            $msg = self::actionText('dns.delete.success', '已删除DNS记录');
+                            $msg_type = "success";
+                        } else {
+                            $msg = self::actionText('dns.delete.failed', '删除DNS记录失败');
+                            $msg_type = "danger";
                         }
-
-                        $remainingRecords = Capsule::table('mod_cloudflare_dns_records')
-                            ->where('subdomain_id', $subdomain_id)
-                            ->count();
-                        if ($remainingRecords == 0) {
-                            Capsule::table('mod_cloudflare_subdomain')
-                                ->where('id', $subdomain_id)
-                                ->update([
-                                    'notes' => '已注册，等待解析设置',
-                                    'updated_at' => date('Y-m-d H:i:s')
-                                ]);
-                        }
-
-                        if (function_exists('cloudflare_subdomain_log')) {
-                            cloudflare_subdomain_log('client_delete_dns_record', ['record_id' => $record_id, 'name' => $rec->name], $userid, $subdomain_id);
-                        }
-
-                        $msg = self::actionText('dns.delete.success', '已删除DNS记录');
-                        $msg_type = "success";
-                    } else {
-                        $msg = self::actionText('dns.delete.failed', '删除DNS记录失败');
-                        $msg_type = "danger";
                     }
                 }
             }
@@ -1574,7 +1603,7 @@ if($_POST['action'] == "delete_dns_record" && isset($_POST['record_id']) && isse
 
 // 一键替换入整组 NS（域名委派）
 if($_POST['action'] == 'replace_ns_group' && isset($_POST['subdomain_id'])) {
-    if (!$disableNsManagement && !$disableDnsWrite && self::shouldUseAsyncDns('replace_ns_group', $module_settings, $isAsyncReplay)) {
+    if (!$disableNsManagement && !$disableDnsWrite && !$dnsUnlockRequired && self::shouldUseAsyncDns('replace_ns_group', $module_settings, $isAsyncReplay)) {
         $jobId = self::enqueueAsyncDnsJob(intval($userid ?? 0), 'replace_ns_group');
         $msg = self::formatAsyncQueuedMessage($jobId);
         $msg_type = 'info';
@@ -1585,7 +1614,10 @@ if($_POST['action'] == 'replace_ns_group' && isset($_POST['subdomain_id'])) {
         ];
     }
 
-    if ($disableNsManagement || $disableDnsWrite) {
+    if ($dnsUnlockRequired) {
+        $msg = $dnsUnlockBlockMessage;
+        $msg_type = 'warning';
+    } elseif ($disableNsManagement || $disableDnsWrite) {
         $msg = self::actionText('dns.operations_disabled', '当前已禁止新增/修改 DNS 记录');
         $msg_type = 'warning';
     } else {
@@ -1829,6 +1861,9 @@ if($_POST['action'] == 'replace_ns_group' && isset($_POST['subdomain_id'])) {
         }
         if (in_array($action, $quotaActions, true)) {
             return CfRateLimiter::SCOPE_QUOTA_GIFT;
+        }
+        if ($action === 'ajax_dns_unlock') {
+            return CfRateLimiter::SCOPE_DNS_UNLOCK;
         }
         return null;
     }

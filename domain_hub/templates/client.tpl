@@ -66,10 +66,13 @@ if (!empty($cfClientGlobals)) {
 
 $moduleSlug = $moduleSlug ?? (defined('CF_MODULE_NAME') ? CF_MODULE_NAME : 'domain_hub');
 $legacyModuleSlug = $legacyModuleSlug ?? (defined('CF_MODULE_NAME_LEGACY') ? CF_MODULE_NAME_LEGACY : $moduleSlug);
+$clientActionQuery = http_build_query(CfClientController::buildClientBaseQuery($moduleSlug));
+$cfClientActionUrl = CfClientController::resolveClientEntryScript() . ($clientActionQuery !== '' ? ('?' . $clientActionQuery) : '');
 $cfmodAssetsBase = '/' . ltrim('modules/addons/' . $moduleSlug . '/assets', '/');
 $nsBySubId = isset($nsBySubId) && is_array($nsBySubId) ? $nsBySubId : [];
 $domainGiftSubdomains = isset($domainGiftSubdomains) && is_array($domainGiftSubdomains) ? $domainGiftSubdomains : [];
 $module_settings = isset($module_settings) && is_array($module_settings) ? $module_settings : [];
+$dnsUnlock = isset($dnsUnlock) && is_array($dnsUnlock) ? $dnsUnlock : ['enabled' => false];
 $forbidden = isset($forbidden) && is_array($forbidden) ? $forbidden : [];
 $roots = isset($roots) && is_array($roots) ? $roots : [];
 $clientAnnounceCookieKey = $clientAnnounceCookieKey ?? ('cfmod_client_announce_' . substr(md5($moduleSlug), 0, 8));
@@ -172,13 +175,18 @@ $cfClientJsLang = [
     'redeemSuccess' => cfmod_trans('cfclient.js.redeem.success', '兑换成功，正在刷新页面'),
     'redeemFailed' => cfmod_trans('cfclient.js.redeem.failed', '兑换失败：%s'),
     'redeemHistoryEmpty' => cfmod_trans('cfclient.js.redeem.history_empty', '暂无兑换记录'),
-    'redeemHistoryLoadFailed' => cfmod_trans('cfclient.js.redeem.history_load_failed', '加载兑换记录失败'),
-    'cfclient.redeem.status.success' => cfmod_trans('cfclient.redeem.status.success', '成功'),
-    'cfclient.redeem.status.failed' => cfmod_trans('cfclient.redeem.status.failed', '失败'),
-    'giftRealtimeLabel' => cfmod_trans('cfclient.js.gift.realtime_label', '实时Top10'),
-    'api.copySuccess' => cfmod_trans('cfclient.js.api.copy_success', '已复制到剪贴板'),
-    'api.copyFailed' => cfmod_trans('cfclient.js.api.copy_failed', '复制失败：'),
-    'api.createFailedWithReason' => cfmod_trans('cfclient.js.api.create_failed_with_reason', '创建失败：'),
+        'dnsUnlockRequired' => cfmod_trans('cfclient.js.dns_unlock.required', '请先完成 DNS 解锁后再设置 NS 记录。'),
+        'dnsUnlockEnterCode' => cfmod_trans('cfclient.js.dns_unlock.enter_code', '请输入解锁码'),
+        'dnsUnlockSuccess' => cfmod_trans('cfclient.js.dns_unlock.success', 'DNS 解锁成功，正在刷新页面...'),
+        'dnsUnlockError' => cfmod_trans('cfclient.js.dns_unlock.error', '解锁失败，请稍后重试。'),
+        'cfclient.dns_unlock.modal.submit' => cfmod_trans('cfclient.dns_unlock.modal.submit', '提交解锁'),
+
+        'cfclient.redeem.status.success' => cfmod_trans('cfclient.redeem.status.success', '成功'),
+
+        'giftRealtimeLabel' => cfmod_trans('cfclient.js.gift.realtime_label', '实时Top10'),
+
+        'api.copyFailed' => cfmod_trans('cfclient.js.api.copy_failed', '复制失败：'),
+
     'api.createFailedGeneric' => cfmod_trans('cfclient.js.api.create_failed_generic', '创建失败，请重试'),
     'api.detailsFailed' => cfmod_trans('cfclient.js.api.details_failed', '获取详情失败：'),
     'api.regenerateConfirm' => cfmod_trans('cfclient.js.api.regenerate_confirm', '重新生成后，旧的API Secret将立即失效，确定继续吗？'),
@@ -220,6 +228,13 @@ if (!$cfmodClientCsrfValid && $msg === '') {
 ?>
 <script>
 window.__nsBySubId = <?php echo json_encode($nsBySubId ?? [], CFMOD_SAFE_JSON_FLAGS); ?>;
+window.cfDnsUnlock = <?php echo json_encode([
+    'enabled' => !empty(($dnsUnlock['enabled'] ?? false)),
+    'isUnlocked' => !empty(($dnsUnlock['isUnlocked'] ?? false)),
+    'unlockCode' => (string) ($dnsUnlock['unlockCode'] ?? ''),
+    'postUrl' => $cfClientActionUrl,
+    'logs' => $dnsUnlock['logs'] ?? ['items' => [], 'page' => 1, 'total' => 0, 'totalPages' => 1],
+], CFMOD_SAFE_JSON_FLAGS); ?>;
 </script>
     <script>
     // 若账户被封禁/停用，则禁用所有交互控件，仅允许浏览
