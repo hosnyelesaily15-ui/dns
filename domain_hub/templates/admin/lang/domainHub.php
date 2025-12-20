@@ -256,6 +256,25 @@ return [
     'runtime_orphan_cursor_current' => '当前默认游标：%s',
     'runtime_orphan_cursor_list' => '各根域游标：%s',
 
+    // DNS unlock
+    'dns_unlock_card_title' => 'DNS 解锁控制',
+    'dns_unlock_enable_label' => '启用 DNS 解锁码功能',
+    'dns_unlock_enable_hint' => '启用后，前台用户需先完成 DNS 解锁才能设置或修改 NS 记录。',
+    'dns_unlock_save_button' => '保存 DNS 解锁设置',
+    'dns_unlock_stats_codes' => '已生成解锁码',
+    'dns_unlock_stats_unlocked' => '已完成解锁的用户',
+    'dns_unlock_stats_logs' => '累计解锁记录',
+    'dns_unlock_logs_title' => 'DNS 解锁日志',
+    'dns_unlock_logs_search_placeholder' => '按邮箱或解锁码搜索',
+    'dns_unlock_logs_search_button' => '搜索',
+    'dns_unlock_logs_header_code' => '解锁码',
+    'dns_unlock_logs_header_owner' => '解锁码所属用户',
+    'dns_unlock_logs_header_unlocker' => '使用者',
+    'dns_unlock_logs_header_time' => '使用时间',
+    'dns_unlock_logs_header_ip' => 'IP 地址',
+    'dns_unlock_logs_empty' => '暂无解锁记录',
+    'dns_unlock_logs_pagination' => '第 %1$d/%2$d 页，共 %3$d 条',
+
     // Announcements
     'announcement_card_title' => '后台公告',
     'announcement_enable_label' => '启用公告',

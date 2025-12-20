@@ -1,4 +1,9 @@
             <!-- 已注册子域名 -->
+<?php
+$dnsUnlockView = $dnsUnlock ?? [];
+$dnsUnlockEnabled = !empty($dnsUnlockView['enabled']);
+$dnsUnlockUnlocked = !empty($dnsUnlockView['isUnlocked']);
+?>
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
                     <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-2">
@@ -14,11 +19,21 @@
                                 <i class="fas fa-exchange-alt"></i> <?php echo cfclient_lang('cfclient.subdomains.button.gift', '域名转赠', [], true); ?>
                             </button>
                             <?php endif; ?>
+                            <?php if ($dnsUnlockEnabled): ?>
+                            <button type="button" class="btn btn-outline-warning" onclick="openDnsUnlockModal()">
+                                <i class="fas fa-unlock-alt"></i> <?php echo cfclient_lang('cfclient.dns_unlock.button', '解锁 DNS', [], true); ?>
+                            </button>
+                            <?php endif; ?>
                             <form class="row g-1 align-items-center mb-0 flex-grow-1" method="get" action="">
-                                <input type="hidden" name="m" value="<?php echo htmlspecialchars($moduleSlug); ?>">
+                                <?php if (!empty($cfClientBaseQuery ?? [])): ?>
+                                    <?php foreach ($cfClientBaseQuery as $baseKey => $baseValue): ?>
+                                        <input type="hidden" name="<?php echo htmlspecialchars($baseKey, ENT_QUOTES); ?>" value="<?php echo htmlspecialchars($baseValue, ENT_QUOTES); ?>">
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+
                                 <?php
                                 $preserveKeys = ['filter_type','filter_name','dns_page','dns_for'];
-                                foreach ($preserveKeys as $preserveKey) {
+
                                     if (isset($_GET[$preserveKey]) && $_GET[$preserveKey] !== '') {
                                         echo '<input type="hidden" name="' . htmlspecialchars($preserveKey, ENT_QUOTES) . '" value="' . htmlspecialchars($_GET[$preserveKey], ENT_QUOTES) . '">';
                                     }
@@ -36,11 +51,26 @@
                                 </div>
                                 <?php endif; ?>
                             </form>
-                        </div>
-                    </div>
+                            </div>
+                            </div>
 
-                    <?php if ($domainSearchTerm !== ''): ?>
-                        <div class="alert alert-<?php echo $existing_total > 0 ? 'info' : 'warning'; ?> mb-3" role="alert">
+                            <?php if ($dnsUnlockEnabled && !$dnsUnlockUnlocked): ?>
+                            <div class="alert alert-warning d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+                            <div>
+                                <strong><i class="fas fa-lock me-2"></i><?php echo cfclient_lang('cfclient.dns_unlock.alert.title', 'DNS 服务器已锁定'); ?></strong>
+                                <div class="small mb-1"><?php echo cfclient_lang('cfclient.dns_unlock.alert.description', '首次设置或修改 NS 记录前，需要好友输入他们的解锁码为你授权。'); ?></div>
+                                <div class="small text-muted"><?php echo cfclient_lang('cfclient.dns_unlock.alert.warning', '如果好友使用自己的解锁码从事违规操作，双方账户将被同时封禁。'); ?></div>
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-warning" onclick="openDnsUnlockModal()">
+                                    <i class="fas fa-unlock-alt"></i> <?php echo cfclient_lang('cfclient.dns_unlock.button', '解锁 DNS', [], true); ?>
+                                </button>
+                            </div>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if ($domainSearchTerm !== ''): ?>
+
                             <?php echo cfclient_lang('cfclient.subdomains.search.alert.result', '搜索关键字：“%1$s”，共找到 %2$s 个匹配结果。', [$domainSearchTerm, $existing_total], true); ?>
                             <?php if ($existing_total === 0): ?>
                                 <?php echo cfclient_lang('cfclient.subdomains.search.alert.empty', '未找到匹配的域名，请尝试使用不同关键词或清除搜索条件后再试。', [], true); ?>

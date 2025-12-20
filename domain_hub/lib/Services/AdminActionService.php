@@ -19,6 +19,7 @@ class CfAdminActionService
     private const HASH_INVITE = '#invite_stats';
     private const HASH_SNAPSHOTS = '#snapshots';
     private const HASH_RUNTIME = '#runtime-control';
+    private const HASH_DNS_UNLOCK = '#dnsUnlock';
     private const HASH_ANNOUNCEMENTS = '#admin-announcements';
     private const HASH_BANS = '#ban-management';
     private const HASH_RISK_MONITOR = '#risk-monitor';
@@ -59,6 +60,7 @@ class CfAdminActionService
         'admin_cancel_domain_gift' => [self::class, 'handleDomainGiftCancel'],
         'admin_unlock_domain_gift_lock' => [self::class, 'handleDomainGiftUnlock'],
         'save_runtime_switches' => [self::class, 'handleRuntimeSwitches'],
+        'save_dns_unlock_settings' => [self::class, 'handleDnsUnlockSettings'],
         'admin_toggle_quota_redeem' => [self::class, 'handleToggleQuotaRedeem'],
         'admin_create_redeem_code' => [self::class, 'handleCreateRedeemCode'],
         'admin_generate_redeem_codes' => [self::class, 'handleGenerateRedeemCodes'],
@@ -1384,16 +1386,40 @@ class CfAdminActionService
         self::redirect(self::HASH_RUNTIME);
     }
 
-    private static function handleDomainGiftCancel(): void
+    private static function handleDnsUnlockSettings(): void
     {
         try {
-            if (!Capsule::schema()->hasTable('mod_cloudflare_domain_gifts')) {
-                throw new Exception('尚未启用域名转赠功能');
+            CfDnsUnlockService::ensureSchema();
+            $enabled = (($_POST['enable_dns_unlock'] ?? '') === '1') ? '1' : '0';
+
+            self::persistModuleSettings([
+                'enable_dns_unlock' => $enabled,
+            ]);
+
+            if (function_exists('cloudflare_subdomain_log')) {
+                cloudflare_subdomain_log('admin_save_dns_unlock', [
+                    'enabled' => $enabled,
+                    'adminid' => $_SESSION['adminid'] ?? null,
+                ]);
             }
-            $giftId = intval($_POST['gift_id'] ?? 0);
-            if ($giftId <= 0) {
-                throw new Exception('缺少转赠记录');
-            }
+
+            self::flashSuccess($enabled === '1' ? '✅ DNS 解锁功能已开启' : '✅ DNS 解锁功能已关闭');
+        } catch (Exception $e) {
+            self::flashError('❌ 保存 DNS 解锁设置失败：' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+        }
+
+        self::redirect(self::HASH_DNS_UNLOCK);
+    }
+
+    private static function handleDomainGiftCancel(): void
+    {
+        if (!Capsule::schema()->hasTable('mod_cloudflare_domain_gifts')) {
+            throw new Exception('尚未启用域名转赠功能');
+        }
+        $giftId = intval($_POST['gift_id'] ?? 0);
+        if ($giftId <= 0) {
+            throw new Exception('缺少转赠记录');
+        }
             $adminId = isset($_SESSION['adminid']) ? intval($_SESSION['adminid']) : null;
             $now = date('Y-m-d H:i:s');
             $giftInfo = Capsule::transaction(function () use ($giftId, $adminId, $now) {

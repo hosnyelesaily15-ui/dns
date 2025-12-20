@@ -10,6 +10,7 @@ class CfModuleInstaller
     {
             try {
                 cfmod_ensure_provider_schema();
+                CfDnsUnlockService::ensureSchema();
                 // 创建主表（如果不存在）
                 if (!Capsule::schema()->hasTable('mod_cloudflare_subdomain')) {
                     Capsule::schema()->create('mod_cloudflare_subdomain', function ($table) {

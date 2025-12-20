@@ -34,6 +34,20 @@ $dnsLineOptions = [
     'oversea' => $modalText('cfclient.modals.dns.line.oversea', '海外'),
     'edu' => $modalText('cfclient.modals.dns.line.edu', '教育网'),
 ];
+$dnsUnlockEnabled = !empty(($dnsUnlock['enabled'] ?? false));
+$dnsUnlockLogs = $dnsUnlock['logs']['items'] ?? [];
+$dnsUnlockLogsPage = $dnsUnlock['logs']['page'] ?? 1;
+$dnsUnlockLogsTotalPages = $dnsUnlock['logs']['totalPages'] ?? 1;
+$dnsUnlockPaginationParams = $_GET ?? [];
+foreach (CfClientController::buildClientBaseQuery($moduleSlug) as $key => $value) {
+    $dnsUnlockPaginationParams[$key] = $value;
+}
+unset($dnsUnlockPaginationParams['dns_unlock_page']);
+$buildDnsUnlockPageUrl = static function (int $page) use ($dnsUnlockPaginationParams): string {
+    $params = $dnsUnlockPaginationParams;
+    $params['dns_unlock_page'] = $page;
+    return '?' . http_build_query($params) . '#dnsUnlockModal';
+};
 ?>
     <!-- DNS设置模态框 -->
     <div class="modal fade" id="dnsModal" tabindex="-1">
@@ -289,10 +303,101 @@ $dnsLineOptions = [
                 </form>
             </div>
         </div>
-    </div>
+        </div>
 
-    <?php if ($quotaRedeemEnabled): ?>
-    <div class="modal fade" id="quotaRedeemModal" tabindex="-1" aria-hidden="true">
+        <?php if ($dnsUnlockEnabled): ?>
+        <div class="modal fade" id="dnsUnlockModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="fas fa-unlock-alt text-warning"></i> <?php echo cfclient_lang('cfclient.dns_unlock.modal.title', 'DNS 解锁'); ?></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="dnsUnlockAlert" class="alert d-none" role="alert"></div>
+                        <div class="row g-4">
+                            <div class="col-md-5">
+                                <form id="dnsUnlockForm" data-cfmod-skip-csrf="1">
+                                    <div class="mb-3">
+                                        <label class="form-label"><?php echo cfclient_lang('cfclient.dns_unlock.modal.input_label', '输入好友提供的解锁码'); ?></label>
+                                        <input type="text" class="form-control" id="dnsUnlockInput" placeholder="<?php echo cfclient_lang('cfclient.dns_unlock.modal.input_placeholder', '请输入 8 位解锁码'); ?>" autocomplete="off">
+                                        <div class="form-text"><?php echo cfclient_lang('cfclient.dns_unlock.modal.info', '完成解锁后，您可对所有已注册域名设置 DNS 服务器。'); ?></div>
+                                    </div>
+                                    <button type="submit" class="btn btn-warning w-100" id="dnsUnlockSubmit">
+                                        <i class="fas fa-key"></i> <?php echo cfclient_lang('cfclient.dns_unlock.modal.submit', '提交解锁'); ?>
+                                    </button>
+                                </form>
+                                <hr>
+                                <div class="mb-3">
+                                    <label class="form-label"><?php echo cfclient_lang('cfclient.dns_unlock.code.label', '我的专属解锁码'); ?></label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="dnsUnlockCodeDisplay" value="<?php echo htmlspecialchars($dnsUnlock['unlockCode'] ?? '', ENT_QUOTES); ?>" readonly>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="copyText('<?php echo htmlspecialchars($dnsUnlock['unlockCode'] ?? '', ENT_QUOTES); ?>')">
+                                            <i class="fas fa-copy"></i> <?php echo cfclient_lang('cfclient.dns_unlock.code.copy', '复制'); ?>
+                                        </button>
+                                    </div>
+                                    <div class="form-text text-muted"><?php echo cfclient_lang('cfclient.dns_unlock.code.hint', '分享给可信的好友，帮助他们解锁 NS 设置。'); ?></div>
+                                </div>
+                                <div class="alert alert-light border">
+                                    <i class="fas fa-shield-alt text-warning"></i>
+                                    <small><?php echo cfclient_lang('cfclient.dns_unlock.modal.warning', '友情提示：如果好友使用此解锁码从事违规操作，您的账号也会被同步封禁。'); ?></small>
+                                </div>
+                            </div>
+                            <div class="col-md-7">
+                                <h6 class="mb-3"><i class="fas fa-users text-muted"></i> <?php echo cfclient_lang('cfclient.dns_unlock.logs.title', '最近使用我解锁码的好友'); ?></h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th><?php echo cfclient_lang('cfclient.dns_unlock.logs.email', '好友邮箱'); ?></th>
+                                                <th><?php echo cfclient_lang('cfclient.dns_unlock.logs.time', '使用时间'); ?></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php if (!empty($dnsUnlockLogs)): ?>
+                                                <?php foreach ($dnsUnlockLogs as $log): ?>
+                                                    <tr>
+                                                        <td><?php echo htmlspecialchars(function_exists('cfmod_mask_email') ? cfmod_mask_email($log['email'] ?? '') : ($log['email'] ?? ''), ENT_QUOTES); ?></td>
+                                                        <td><small class="text-muted"><?php echo htmlspecialchars($log['unlockedAt'] ?? '', ENT_QUOTES); ?></small></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            <?php else: ?>
+                                                <tr>
+                                                    <td colspan="2" class="text-center text-muted py-3"><?php echo cfclient_lang('cfclient.dns_unlock.logs.empty', '暂无好友使用记录'); ?></td>
+                                                </tr>
+                                            <?php endif; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <?php if ($dnsUnlockLogsTotalPages > 1): ?>
+                                    <nav class="mt-2">
+                                        <ul class="pagination pagination-sm justify-content-end">
+                                            <?php if ($dnsUnlockLogsPage > 1): ?>
+                                                <li class="page-item"><a class="page-link" href="<?php echo htmlspecialchars($buildDnsUnlockPageUrl($dnsUnlockLogsPage - 1), ENT_QUOTES); ?>"><?php echo cfclient_lang('cfclient.pagination.prev', '上一页'); ?></a></li>
+                                            <?php endif; ?>
+                                            <?php for ($i = 1; $i <= $dnsUnlockLogsTotalPages; $i++): ?>
+                                                <?php if ($i === $dnsUnlockLogsPage): ?>
+                                                    <li class="page-item active"><span class="page-link"><?php echo $i; ?></span></li>
+                                                <?php else: ?>
+                                                    <li class="page-item"><a class="page-link" href="<?php echo htmlspecialchars($buildDnsUnlockPageUrl($i), ENT_QUOTES); ?>"><?php echo $i; ?></a></li>
+                                                <?php endif; ?>
+                                            <?php endfor; ?>
+                                            <?php if ($dnsUnlockLogsPage < $dnsUnlockLogsTotalPages): ?>
+                                                <li class="page-item"><a class="page-link" href="<?php echo htmlspecialchars($buildDnsUnlockPageUrl($dnsUnlockLogsPage + 1), ENT_QUOTES); ?>"><?php echo cfclient_lang('cfclient.pagination.next', '下一页'); ?></a></li>
+                                            <?php endif; ?>
+                                        </ul>
+                                    </nav>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($quotaRedeemEnabled): ?>
+
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">

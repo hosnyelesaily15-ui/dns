@@ -92,6 +92,13 @@ if (!function_exists('cfmod_client_mask_leaderboard_email')) {
     }
 }
 
+if (!function_exists('cfmod_mask_email')) {
+    function cfmod_mask_email(?string $email): string
+    {
+        return cfmod_client_mask_leaderboard_email($email);
+    }
+}
+
 if (!function_exists('cfmod_client_fetch_invite_user_meta')) {
     function cfmod_client_fetch_invite_user_meta(array $userIds): array
     {

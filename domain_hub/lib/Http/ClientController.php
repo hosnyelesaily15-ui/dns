@@ -291,6 +291,97 @@ class CfClientController
             exit;
     }
 
+    private function handleAjaxDnsUnlockRequest(int $userId): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        if ($userId <= 0) {
+            echo json_encode(['success' => false, 'error' => cfmod_trans('cfclient.dns_unlock.login_required', '请先登录后再进行解锁。')]);
+            exit;
+        }
+
+        $moduleSettings = function_exists('cf_get_module_settings_cached') ? cf_get_module_settings_cached() : [];
+        $service = CfDnsUnlockService::instance();
+        if (!$service->isEnabled($moduleSettings)) {
+            echo json_encode(['success' => false, 'error' => cfmod_trans('cfclient.dns_unlock.disabled', 'DNS 解锁功能尚未启用。')]);
+            exit;
+        }
+
+        $csrfHeader = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        if (!empty($_SESSION['cfmod_csrf']) && (!hash_equals($_SESSION['cfmod_csrf'], (string) $csrfHeader))) {
+            echo json_encode(['success' => false, 'error' => cfmod_trans('cfclient.csrf_failed', '安全校验失败：请刷新页面后重试。')]);
+            exit;
+        }
+
+        $rawInput = file_get_contents('php://input');
+        $payload = json_decode($rawInput, true);
+        if (!is_array($payload)) {
+            $payload = $_POST;
+        }
+        $unlockCode = isset($payload['unlock_code']) ? (string) $payload['unlock_code'] : '';
+        if (trim($unlockCode) === '') {
+            echo json_encode(['success' => false, 'error' => cfmod_trans('cfclient.dns_unlock.error.empty', '请输入好友提供的解锁码。')]);
+            exit;
+        }
+
+        try {
+            $limit = CfRateLimiter::resolveLimit(CfRateLimiter::SCOPE_DNS_UNLOCK, $moduleSettings);
+            CfRateLimiter::enforce(CfRateLimiter::SCOPE_DNS_UNLOCK, $limit, [
+                'userid' => $userId,
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+                'identifier' => 'ajax_dns_unlock',
+            ]);
+        } catch (CfRateLimitExceededException $e) {
+            $minutes = CfRateLimiter::formatRetryMinutes($e->getRetryAfterSeconds());
+            echo json_encode(['success' => false, 'error' => cfmod_trans('cfclient.dns_unlock.rate_limit', '操作过于频繁，请 %s 分钟后重试。', [$minutes])]);
+            exit;
+        }
+
+        try {
+            $result = $service->unlockUserWithCode($userId, $unlockCode, $_SERVER['REMOTE_ADDR'] ?? '');
+            $messageKey = $result['alreadyUnlocked'] ? 'cfclient.dns_unlock.already' : 'cfclient.dns_unlock.success';
+            $message = cfmod_trans($messageKey, $result['alreadyUnlocked']
+                ? '您的账户已完成解锁，无需重复操作。'
+                : 'DNS 解锁成功，您现在可以设置 NS 记录。');
+
+            echo json_encode([
+                'success' => true,
+                'message' => $message,
+                'alreadyUnlocked' => (bool) ($result['alreadyUnlocked'] ?? false),
+            ]);
+        } catch (CfDnsUnlockException $e) {
+            echo json_encode([
+                'success' => false,
+                'error' => $this->translateDnsUnlockError($e->getReason()),
+            ]);
+        } catch (\Throwable $e) {
+            $fallback = cfmod_trans('cfclient.dns_unlock.error.generic', '解锁失败，请稍后重试。');
+            echo json_encode(['success' => false, 'error' => $fallback]);
+        }
+
+        exit;
+    }
+
+    private function translateDnsUnlockError(string $reason): string
+    {
+        switch ($reason) {
+            case 'empty_code':
+                return cfmod_trans('cfclient.dns_unlock.error.empty', '请输入好友提供的解锁码。');
+            case 'invalid_code':
+                return cfmod_trans('cfclient.dns_unlock.error.invalid', '解锁码格式不正确。');
+            case 'code_not_found':
+                return cfmod_trans('cfclient.dns_unlock.error.not_found', '解锁码不存在或已失效。');
+            case 'self_code':
+                return cfmod_trans('cfclient.dns_unlock.error.self', '不能使用自己的解锁码。');
+            case 'code_owner_missing':
+                return cfmod_trans('cfclient.dns_unlock.error.owner_missing', '解锁码所有者信息不存在，请联系管理员。');
+            case 'user_missing':
+                return cfmod_trans('cfclient.dns_unlock.error.user_missing', '当前账号信息不存在，请联系管理员。');
+            default:
+                return cfmod_trans('cfclient.dns_unlock.error.generic', '解锁失败，请稍后重试。');
+        }
+    }
+
     private function handleLanguageSwitchRequest(string $languageCode, string $moduleSlug, ?array $returnParams = null): void
     {
             try {
@@ -334,9 +425,13 @@ class CfClientController
                                 self::respondAjaxRateLimitError($e);
                             }
 
+                            if ($action === 'ajax_dns_unlock') {
+                                $this->handleAjaxDnsUnlockRequest($userId);
+                            }
+
                             // 创建API密钥
                             if ($action === 'ajax_create_api_key') {
-                                try {
+
                                     // CSRF 校验
                                     $hdr = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
                                     if (!empty($_SESSION['cfmod_csrf']) && (!hash_equals($_SESSION['cfmod_csrf'], (string)$hdr))) {
