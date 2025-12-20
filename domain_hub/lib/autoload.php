@@ -21,6 +21,7 @@ spl_autoload_register(static function (string $class): void {
         'CfAdminViewModelBuilder' => __DIR__ . '/Services/AdminViewModelBuilder.php',
         'CfDnsUnlockService' => __DIR__ . '/Services/DnsUnlockService.php',
         'CfRateLimiter' => __DIR__ . '/Services/RateLimiter.php',
+        'CfModuleSettings' => __DIR__ . '/Support/ModuleSettings.php',
         'CfModuleInstaller' => __DIR__ . '/Setup/ModuleInstaller.php',
         'CfHookRegistrar' => __DIR__ . '/Hooks/Registrar.php',
         'CfApiRouter' => __DIR__ . '/Support/ApiRouter.php',
