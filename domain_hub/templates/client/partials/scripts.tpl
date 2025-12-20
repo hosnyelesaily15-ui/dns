@@ -57,13 +57,15 @@
                     dnsUnlockSubmit.disabled = true;
                     dnsUnlockSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + cfLang('buttonSubmitting', '提交中...');
                 }
+                const unlockRequestBody = new URLSearchParams();
+                unlockRequestBody.set('action', 'ajax_dns_unlock');
+                unlockRequestBody.set('unlock_code', code);
                 fetch(CF_DNS_UNLOCK.postUrl || window.location.href, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
                         'X-CSRF-Token': window.CF_MOD_CSRF || ''
                     },
-                    body: JSON.stringify({ action: 'ajax_dns_unlock', unlock_code: code })
+                    body: unlockRequestBody
                 }).then(resp => resp.json()).then(data => {
                     if (data.success) {
                         setDnsUnlockAlert('success', data.message || cfLang('dnsUnlockSuccess', 'DNS 解锁成功，正在刷新页面...'));

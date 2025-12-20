@@ -20,6 +20,7 @@ class CfAdminViewModelBuilder
         'invite',
         'jobs',
         'runtime',
+        'dnsUnlock',
         'risk',
         'logs',
         'maintenance',
@@ -47,10 +48,11 @@ class CfAdminViewModelBuilder
         $viewModel['invite'] = self::buildInviteInsights($moduleSettings);
         $viewModel['bans'] = self::buildBans();
         $viewModel['runtime'] = self::buildRuntimeTools();
+        $viewModel['dnsUnlock'] = self::buildDnsUnlock($moduleSettings);
         $viewModel['logs'] = self::buildLogs();
 
         return $viewModel;
-    }
+        }
 
     private static function buildAlerts(): array
     {
@@ -1243,11 +1245,29 @@ class CfAdminViewModelBuilder
             'rootdomains' => $rootdomains,
             'orphanCursors' => $orphanCursors,
         ];
-    }
+        }
 
-    private static function buildLogs(): array
-    {
-        $showAll = (($_GET['view_all_logs'] ?? '') === '1');
+        private static function buildDnsUnlock(array $moduleSettings): array
+        {
+        $service = CfDnsUnlockService::instance();
+        $enabled = cfmod_setting_enabled($moduleSettings['enable_dns_unlock'] ?? '0');
+        $keyword = trim((string) ($_GET['dns_unlock_kw'] ?? ''));
+        $page = max(1, (int) ($_GET['dns_unlock_log_page'] ?? 1));
+        $logs = $service->getAdminLogs($keyword, $page, 20);
+
+        return [
+            'enabled' => $enabled,
+            'stats' => $service->getAdminStats(),
+            'logs' => $logs,
+            'search' => [
+                'keyword' => $keyword,
+            ],
+        ];
+        }
+
+        private static function buildLogs(): array
+        {
+
         $logsUserFilter = trim((string) ($_GET['logs_user'] ?? ''));
         $logsPage = isset($_GET['logs_page']) ? max(1, (int) $_GET['logs_page']) : 1;
         $logsPerPage = 20;

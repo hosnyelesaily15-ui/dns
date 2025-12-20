@@ -66,7 +66,8 @@ if (!empty($cfClientGlobals)) {
 
 $moduleSlug = $moduleSlug ?? (defined('CF_MODULE_NAME') ? CF_MODULE_NAME : 'domain_hub');
 $legacyModuleSlug = $legacyModuleSlug ?? (defined('CF_MODULE_NAME_LEGACY') ? CF_MODULE_NAME_LEGACY : $moduleSlug);
-$clientActionQuery = http_build_query(CfClientController::buildClientBaseQuery($moduleSlug));
+$cfClientBaseQuery = CfClientController::buildClientBaseQuery($moduleSlug);
+$clientActionQuery = http_build_query($cfClientBaseQuery);
 $cfClientActionUrl = CfClientController::resolveClientEntryScript() . ($clientActionQuery !== '' ? ('?' . $clientActionQuery) : '');
 $cfmodAssetsBase = '/' . ltrim('modules/addons/' . $moduleSlug . '/assets', '/');
 $nsBySubId = isset($nsBySubId) && is_array($nsBySubId) ? $nsBySubId : [];

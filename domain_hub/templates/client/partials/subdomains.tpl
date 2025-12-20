@@ -25,10 +25,15 @@ $dnsUnlockUnlocked = !empty($dnsUnlockView['isUnlocked']);
                             </button>
                             <?php endif; ?>
                             <form class="row g-1 align-items-center mb-0 flex-grow-1" method="get" action="">
+                                <?php if (!empty($cfClientBaseQuery ?? [])): ?>
+                                    <?php foreach ($cfClientBaseQuery as $baseKey => $baseValue): ?>
+                                        <input type="hidden" name="<?php echo htmlspecialchars($baseKey, ENT_QUOTES); ?>" value="<?php echo htmlspecialchars($baseValue, ENT_QUOTES); ?>">
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
 
                                 <?php
                                 $preserveKeys = ['filter_type','filter_name','dns_page','dns_for'];
-                                foreach ($preserveKeys as $preserveKey) {
+
                                     if (isset($_GET[$preserveKey]) && $_GET[$preserveKey] !== '') {
                                         echo '<input type="hidden" name="' . htmlspecialchars($preserveKey, ENT_QUOTES) . '" value="' . htmlspecialchars($_GET[$preserveKey], ENT_QUOTES) . '">';
                                     }
