@@ -1245,28 +1245,28 @@ class CfAdminViewModelBuilder
             'rootdomains' => $rootdomains,
             'orphanCursors' => $orphanCursors,
         ];
-        }
+    }
 
-        private static function buildDnsUnlock(array $moduleSettings): array
-        {
-        $service = CfDnsUnlockService::instance();
-        $enabled = cfmod_setting_enabled($moduleSettings['enable_dns_unlock'] ?? '0');
-        $keyword = trim((string) ($_GET['dns_unlock_kw'] ?? ''));
-        $page = max(1, (int) ($_GET['dns_unlock_log_page'] ?? 1));
-        $logs = $service->getAdminLogs($keyword, $page, 20);
+private static function buildDnsUnlock(array $moduleSettings): array
+{
+$service = CfDnsUnlockService::instance();
+$enabled = cfmod_setting_enabled($moduleSettings['enable_dns_unlock'] ?? '0');
+$keyword = trim((string) ($_GET['dns_unlock_kw'] ?? ''));
+$page = max(1, (int) ($_GET['dns_unlock_log_page'] ?? 1));
+$logs = $service->getAdminLogs($keyword, $page, 20);
 
-        return [
-            'enabled' => $enabled,
-            'stats' => $service->getAdminStats(),
-            'logs' => $logs,
-            'search' => [
-                'keyword' => $keyword,
-            ],
-        ];
-        }
+return [
+'enabled' => $enabled,
+'stats' => $service->getAdminStats(),
+'logs' => $logs,
+'search' => [
+'keyword' => $keyword,
+],
+];
+}
 
-        private static function buildLogs(): array
-        {
+private static function buildLogs(): array
+{
 
         $logsUserFilter = trim((string) ($_GET['logs_user'] ?? ''));
         $logsPage = isset($_GET['logs_page']) ? max(1, (int) $_GET['logs_page']) : 1;

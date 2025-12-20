@@ -475,10 +475,9 @@ $riskLogEvents = $riskLogMeta['entries'] ?? [];
             <h2 class="mb-4">阿里云DNS 二级域名管理</h2>
             <?php include __DIR__ . '/admin/partials/alerts.tpl'; ?>
             <?php include __DIR__ . '/admin/partials/stats_cards.tpl'; ?>
-
-<?php include __DIR__ . '/admin/partials/runtime_tools.tpl'; ?>
-
-<?php include __DIR__ . '/admin/partials/job_queue.tpl'; ?>
+            <?php include __DIR__ . '/admin/partials/runtime_tools.tpl'; ?>
+            <?php include __DIR__ . '/admin/partials/dns_unlock.tpl'; ?>
+            <?php include __DIR__ . '/admin/partials/job_queue.tpl'; ?>
 
             <!-- 子域名已解析列表 -->
             <div class="card mb-4">

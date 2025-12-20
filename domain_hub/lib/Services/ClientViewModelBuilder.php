@@ -101,6 +101,7 @@ class CfClientViewModelBuilder
 
         $banState = function_exists('cfmod_resolve_user_ban_state') ? cfmod_resolve_user_ban_state($userId) : ['is_banned' => false, 'reason' => ''];
 
+        $globals['banState'] = $banState;
         $globals['isUserBannedOrInactive'] = !empty($banState['is_banned']);
         $globals['banReasonText'] = $banState['reason'] !== '' ? htmlspecialchars($banState['reason']) : '';
 

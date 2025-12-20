@@ -31,6 +31,7 @@ $headerIp = $lang['dns_unlock_logs_header_ip'] ?? 'IP 地址';
 $emptyText = $lang['dns_unlock_logs_empty'] ?? '暂无解锁记录';
 $prevLabel = $lang['common_prev'] ?? '上一页';
 $nextLabel = $lang['common_next'] ?? '下一页';
+$paginationText = $lang['dns_unlock_logs_pagination'] ?? '第 %1$d/%2$d 页，共 %3$d 条';
 
 $totalCodes = intval($stats['totalCodes'] ?? 0);
 $totalUnlocked = intval($stats['totalUnlocked'] ?? 0);
@@ -138,7 +139,7 @@ $buildDnsUnlockAdminUrl = static function (int $targetPage) use ($paginationBase
 
         <?php if ($totalPages > 1): ?>
         <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
-            <div class="text-muted small"><?php echo sprintf('第 %d/%d 页，共 %d 条', $page, $totalPages, $totalLogs); ?></div>
+            <div class="text-muted small"><?php echo sprintf($paginationText, $page, $totalPages, $totalLogs); ?></div>
             <nav>
                 <ul class="pagination pagination-sm mb-0">
                     <li class="page-item <?php echo $page <= 1 ? 'disabled' : ''; ?>">
