@@ -4,6 +4,7 @@ if (!defined("WHMCS")) die("This file cannot be accessed directly");
 use WHMCS\Database\Capsule;
 
 require_once __DIR__ . '/lib/autoload.php';
+require_once __DIR__ . '/lib/Support/ModuleSettings.php';
 CfModuleSettings::bootstrap();
 require_once __DIR__ . '/lib/CloudflareAPI.php';
 require_once __DIR__ . '/lib/ExternalRiskAPI.php';
